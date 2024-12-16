@@ -58,18 +58,29 @@
 	//////////////////////////
 
 	const loadSharedChat = async () => {
-		await models.set(await getModels(localStorage.token));
+		try {
+			await models.set(await getModels(localStorage.token).catch(() => []));
+		} catch (error) {
+			console.warn('Failed to load models, continuing without models list');
+		}
+
 		await chatId.set($page.params.id);
 		chat = await getChatByShareId(localStorage.token, $chatId).catch(async (error) => {
+			if (error.status === 403 || error.status === 401) {
+				// Try without token for unauthenticated access
+				return await getChatByShareId(null, $chatId);
+			}
 			await goto('/');
 			return null;
 		});
 
 		if (chat) {
-			user = await getUserById(localStorage.token, chat.user_id).catch((error) => {
-				console.error(error);
-				return null;
-			});
+			try {
+				user = await getUserById(localStorage.token, chat.user_id).catch(() => null);
+			} catch (error) {
+				console.warn('Failed to load user info, continuing with anonymous view');
+				user = null;
+			}
 
 			const chatContent = chat.chat;
 
@@ -95,10 +106,9 @@
 				await tick();
 
 				return true;
-			} else {
-				return null;
 			}
 		}
+		return false;
 	};
 </script>
 

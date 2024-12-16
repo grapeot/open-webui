@@ -18,8 +18,7 @@ from open_webui.env import SRC_LOG_LEVELS
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-
-from open_webui.utils.utils import get_admin_user, get_verified_user
+from open_webui.utils.utils import get_admin_user, get_verified_user, get_optional_user
 from open_webui.utils.access_control import has_permission
 
 log = logging.getLogger(__name__)
@@ -286,24 +285,17 @@ async def archive_all_chats(user=Depends(get_verified_user)):
 
 
 @router.get("/share/{share_id}", response_model=Optional[ChatResponse])
-async def get_shared_chat_by_id(share_id: str, user=Depends(get_verified_user)):
-    if user.role == "pending":
+async def get_shared_chat_by_id(share_id: str, user=Depends(get_optional_user)):
+    # Allow access to shared chats without authentication
+    chat = Chats.get_chat_by_share_id(share_id)
+
+    if not chat:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=ERROR_MESSAGES.NOT_FOUND
         )
 
-    if user.role == "user" or (user.role == "admin" and not ENABLE_ADMIN_CHAT_ACCESS):
-        chat = Chats.get_chat_by_share_id(share_id)
-    elif user.role == "admin" and ENABLE_ADMIN_CHAT_ACCESS:
-        chat = Chats.get_chat_by_id(share_id)
-
-    if chat:
-        return ChatResponse(**chat.model_dump())
-
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND
-        )
+    return ChatResponse(**chat.model_dump())
 
 
 ############################
